@@ -180,7 +180,8 @@ def generate_sticker_direct(template_path: str, url: str, output_path: str):
 # Подход без pdf2image (не требует дополнительных зависимостей)
 # =====================
 
-def generate_sticker_pypdf2_overlay(template_path: str, url: str, output_path: str):
+def generate_sticker_pypdf2_overlay(template_path: str, url: str, output_path: str,
+                                     caption: str = ""):
     """
     Используем PyPDF2 + reportlab для оверлея QR на макет.
     Создаём PDF с QR, мерджим с макетом.
@@ -206,6 +207,11 @@ def generate_sticker_pypdf2_overlay(template_path: str, url: str, output_path: s
         preserveAspectRatio=True,
         anchor='sw',
     )
+    # Подпись — мелкий шрифт снизу по центру
+    if caption:
+        c.setFont("Helvetica", 3.5)
+        c.setFillColorRGB(0.4, 0.4, 0.4)
+        c.drawCentredString(PAGE_W / 2, 1.5, caption)
     c.save()
 
     # Читаем макет
@@ -275,6 +281,8 @@ def run_http_server(host='0.0.0.0', port=8080, template=DEFAULT_TEMPLATE):
                 return
 
             url = params.get('url', [None])[0]
+            caption = params.get('caption', [None])[0] or ""
+
             if not url:
                 self.send_response(400)
                 self.send_header('Content-Type', 'text/plain; charset=utf-8')
@@ -294,7 +302,9 @@ def run_http_server(host='0.0.0.0', port=8080, template=DEFAULT_TEMPLATE):
             try:
                 out_name = f"sticker_{uuid.uuid4().hex[:8]}.pdf"
                 out_path = os.path.join(OUTPUT_DIR, out_name)
-                generate_sticker_pypdf2_overlay(self.template_path, url, out_path)
+                generate_sticker_pypdf2_overlay(
+                    self.template_path, url, out_path, caption=caption,
+                )
 
                 with open(out_path, 'rb') as f:
                     pdf_data = f.read()
@@ -337,6 +347,8 @@ def main():
     parser = argparse.ArgumentParser(description='Генератор наклеек с QR-кодом')
     parser.add_argument('--url', help='Ссылка для QR-кода')
     parser.add_argument('--output', '-o', help='Выходной PDF-файл')
+    parser.add_argument('--caption', default='',
+                        help='Подпись (мелкий текст справа внизу наклейки)')
     parser.add_argument('--template', default=DEFAULT_TEMPLATE,
                         help='Путь к PDF-шаблону (по умолчанию maket.pdf)')
     parser.add_argument('--serve', action='store_true',
@@ -358,7 +370,9 @@ def main():
     output = args.output or os.path.join(OUTPUT_DIR, 'sticker_output.pdf')
     os.makedirs(os.path.dirname(output) or '.', exist_ok=True)
 
-    generate_sticker_pypdf2_overlay(args.template, args.url, output)
+    generate_sticker_pypdf2_overlay(
+        args.template, args.url, output, caption=args.caption,
+    )
     print(f"✅ Готово: {output}")
 
 

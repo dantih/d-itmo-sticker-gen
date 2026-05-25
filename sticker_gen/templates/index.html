@@ -272,6 +272,14 @@
                     Сгенерировать
                 </button>
             </div>
+            <div class="input-group">
+                <label for="captionInput">Подпись (мелкий текст снизу — чтобы не запутаться при расклейке)</label>
+                <div class="input-row">
+                    <input type="text" id="captionInput"
+                           placeholder="Коворкинг «Альфа», 3 этаж"
+                           autocomplete="off">
+                </div>
+            </div>
             <div class="error" id="errorMsg"></div>
             <div class="action-row" id="actionRow" style="display:none">
                 <button class="btn btn-success" onclick="downloadPdf()">
@@ -375,7 +383,8 @@
             info.classList.remove('visible');
 
             try {
-                const resp = await fetch(API_URL + '?url=' + encodeURIComponent(url));
+                const cap = document.getElementById('captionInput').value.trim();
+                const resp = await fetch(API_URL + '?url=' + encodeURIComponent(url) + '&caption=' + encodeURIComponent(cap));
                 if (!resp.ok) {
                     const text = await resp.text();
                     throw new Error(text || `Ошибка ${resp.status}`);
