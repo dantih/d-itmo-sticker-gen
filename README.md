@@ -10,78 +10,83 @@
 
 ## Возможности
 
-- CLI: `sticker-gen --url "https://..." --output sticker.pdf`
-- HTTP-сервер: `sticker-gen --serve --port 8080`
-- Веб-интерфейс: форма ввода ссылки, превью PDF, скачивание
-- Замена QR-кода в существующем PDF-макете с сохранением всей остальной вёрстки
-- Готовый systemd unit для автозапуска
+- **CLI:** `sticker-gen --url "https://..." --output sticker.pdf`
+- **HTTP-сервер:** `sticker-gen --serve` — встроенная веб-морда с превью
+- **API:** `GET /generate?url=<URL>` — возвращает готовый PDF
+- Замена QR-кода в PDF-макете с сохранением всей вёрстки
+- systemd-юнит для автозапуска
 
-## Быстрый старт
+## Установка
 
 ```bash
-# Установка
-pip install sticker-gen
+# pip из репозитория
+pip install git+https://github.com/dantih/d-itmo-sticker-gen.git
 
-# Скачай или положи шаблон maket.pdf рядом (или укажи --template)
-# Встроенный шаблон используется по умолчанию
-
-# CLI: сгенерировать одну наклейку
-sticker-gen --url "https://forms.yandex.ru/u/..." -o nakleika.pdf
-
-# HTTP-сервер
-sticker-gen --serve --port 8080
-# → http://localhost:8080/
+# Или локально
+git clone https://github.com/dantih/d-itmo-sticker-gen
+cd d-itmo-sticker-gen
+pip install .
 ```
+
+После установки доступна команда `sticker-gen`.
 
 ## Использование
 
 ### CLI
 
 ```bash
-sticker-gen [OPTIONS]
+# Одна наклейка
+sticker-gen --url "https://forms.yandex.ru/u/..." -o nakleika.pdf
 
-Options:
-  --url URL           Ссылка для QR-кода
-  --output, -o FILE   Выходной PDF-файл
-  --template FILE     Путь к PDF-шаблону (по умолч. встроенный maket.pdf)
-  --serve             Режим HTTP-сервера
-  --port PORT         Порт (по умолч. 8080)
-  --host HOST         Хост (по умолч. 0.0.0.0)
+# Со своим шаблоном
+sticker-gen --url "https://itmo.ru" -o sticker.pdf --template my_maket.pdf
 ```
 
-### HTTP API
-
-```
-GET /generate?url=<URL>
-  → Content-Type: application/pdf
-  → attachment-скачивание
-
-GET / → веб-интерфейс
-GET /health → OK
-```
-
-### Примеры
+### HTTP-сервер
 
 ```bash
-# Яндекс.Форма
-sticker-gen --url "https://forms.yandex.ru/u/67e1a2c3d046880e2b8f4a12/" -o itmo_sticker.pdf
-
-# Любая ссылка
-sticker-gen --url "https://itmo.ru" -o itmo_sticker.pdf
-
-# Сервер
-sticker-gen --serve --port 8080 --template /etc/sticker/maket.pdf
+sticker-gen --serve --port 8080
+# → http://localhost:8080/ — веб-интерфейс
+# → http://localhost:8080/generate?url=<URL> — API
+# → http://localhost:8080/health — проверка
 ```
 
-## Установка как сервис (systemd)
+### API
+
+```
+GET /generate?url=https://forms.yandex.ru/u/...
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="sticker_abc12345.pdf"
+```
+
+## Установка как systemd-сервис
 
 ```bash
+# Скопировать юнит
 sudo cp sticker-gen.service /etc/systemd/system/
+
+# Отредактировать User/WorkingDirectory под свою среду
 sudo systemctl daemon-reload
 sudo systemctl enable --now sticker-gen
 ```
 
-Сервис запускается на порту 8080, слушает на всех интерфейсах.
+## Как это работает
+
+1. Сервер получает URL
+2. Библиотека `qrcode` генерирует QR-код (уровень коррекции H — 30%)
+3. `reportlab` рисует QR как PDF-оверлей с точными координатами из макета
+4. `PyPDF2.merge_page` накладывает оверлей поверх исходного PDF
+5. Возвращается готовый PDF
+
+Макет (110×35 мм):
+```
+┌──────────┬──────────────────────────┐
+│          │  вітмо                    │
+│   QR     │  Что-то сломано? Грязно?  │
+│   код    │  Сканируй код и отправляй │
+│          │  заявку на уборку/ремонт  │
+└──────────┴──────────────────────────┘
+```
 
 ## Разработка
 
@@ -93,17 +98,13 @@ source venv/bin/activate
 pip install -e .
 ```
 
-## Как это работает
+## Зависимости
 
-1. Сервер получает URL
-2. Библиотека `qrcode` генерирует QR-код как PNG
-3. `reportlab` рисует QR в PDF-оверлей нужного размера и позиции
-4. `PyPDF2` мерджит оверлей с исходным макетом (merge_page)
-5. Возвращается готовый PDF
-
-Макет (110×35 мм) содержит:
-- Левую часть: поле для QR-кода
-- Правую часть: заголовок «Что-то сломано? Грязно?», логотип ИТМО, призыв к действию
+- Python ≥ 3.10
+- PyPDF2
+- qrcode[pil]
+- Pillow
+- reportlab
 
 ## Лицензия
 
