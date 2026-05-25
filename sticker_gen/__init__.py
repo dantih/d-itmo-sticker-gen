@@ -277,6 +277,41 @@ def generate_sticker_pypdf2_overlay(template_path: str, url: str, output_path: s
 # A4 лист — 8 одинаковых стикеров на странице
 # =====================
 
+def _make_filename(caption: str, prefix: str = "sticker") -> str:
+    """
+    Генерирует имя файла на основе подписи:
+    - если подпись есть: транслитерирует, спецсимволы → '_'
+    - если подписи нет: случайные 6 символов
+    """
+    import re
+    if not caption:
+        import string
+        import random
+        rand = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        return f"{prefix}_{rand}.pdf"
+    # Простая транслитерация
+    trans = {
+        'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e',
+        'ж':'zh','з':'z','и':'i','й':'i','к':'k','л':'l','м':'m',
+        'н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u',
+        'ф':'f','х':'kh','ц':'ts','ч':'ch','ш':'sh','щ':'shch',
+        'ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya',
+        'А':'A','Б':'B','В':'V','Г':'G','Д':'D','Е':'E','Ё':'E',
+        'Ж':'Zh','З':'Z','И':'I','Й':'I','К':'K','Л':'L','М':'M',
+        'Н':'N','О':'O','П':'P','Р':'R','С':'S','Т':'T','У':'U',
+        'Ф':'F','Х':'Kh','Ц':'Ts','Ч':'Ch','Ш':'Sh','Щ':'Shch',
+        'Ъ':'','Ы':'Y','Ь':'','Э':'E','Ю':'Yu','Я':'Ya',
+        ' ':'_', '-':'_', '—':'_', '(':'_', ')':'_',
+    }
+    result = ''.join(trans.get(c, c) for c in caption)
+    result = re.sub(r'_+', '_', result).strip('_')
+    result = re.sub(r'[^a-zA-Z0-9_-]', '_', result)
+    result = re.sub(r'_+', '_', result).strip('_')
+    if not result:
+        result = 'sticker'
+    return f"{prefix}_{result[:40].rstrip('_')}.pdf"
+
+
 A4_W = 595.28   # pt (210 мм)
 A4_H = 841.89   # pt (297 мм)
 
@@ -428,13 +463,13 @@ def run_http_server(host='0.0.0.0', port=8080, template=DEFAULT_TEMPLATE):
                 mode = params.get('mode', ['single'])[0]
 
                 if mode == 'a4':
-                    out_name = f"stickers_a4_{uuid.uuid4().hex[:8]}.pdf"
+                    out_name = _make_filename(caption, 'stickers_a4')
                     out_path = os.path.join(OUTPUT_DIR, out_name)
                     generate_sticker_a4_sheet(
                         self.template_path, url, out_path, caption=caption,
                     )
                 else:
-                    out_name = f"sticker_{uuid.uuid4().hex[:8]}.pdf"
+                    out_name = _make_filename(caption, 'sticker')
                     out_path = os.path.join(OUTPUT_DIR, out_name)
                     generate_sticker_pypdf2_overlay(
                         self.template_path, url, out_path, caption=caption,
