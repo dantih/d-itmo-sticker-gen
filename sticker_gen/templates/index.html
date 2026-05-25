@@ -475,9 +475,15 @@
                 }
 
                 const blob = await resp.blob();
+                let a4Filename = 'stickers_a4.pdf';
+                const cd = resp.headers.get('Content-Disposition');
+                if (cd) {
+                    const m = cd.match(/filename="?(.+?)"?$/);
+                    if (m) a4Filename = m[1];
+                }
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
-                link.download = 'stickers_a4.pdf';
+                link.download = a4Filename;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
