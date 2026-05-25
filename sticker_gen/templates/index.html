@@ -145,6 +145,24 @@
         .input-row input::placeholder {
             color: #9ca3af;
         }
+        @media (max-width: 500px) {
+            .input-row {
+                flex-direction: column;
+            }
+            .input-row .btn {
+                width: 100%;
+                min-width: unset;
+            }
+            .card {
+                padding: 20px;
+            }
+            .action-row {
+                flex-direction: column;
+            }
+            .action-row .btn {
+                width: 100%;
+            }
+        }
         .btn {
             display: inline-flex;
             align-items: center;
