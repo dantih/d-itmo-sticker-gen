@@ -296,40 +296,43 @@ def generate_sticker_a4_sheet(template_path: str, url: str, output_path: str,
                                caption: str = ""):
     """
     Генерирует лист A4 с одинаковыми стикерами (8 шт в колонку).
+
+    Использует pdf2image для однократного рендера макета в PNG,
+    после чего reportlab компонует A4-страницу. На Windows требует
+    установки poppler (см. README).
     """
-    from PyPDF2 import PdfReader, PdfWriter
     from reportlab.pdfgen import canvas
     from reportlab.lib.utils import ImageReader
+    from pdf2image import convert_from_path
+    from io import BytesIO
     import io as py_io
 
-    # Генерируем один QR
+    # QR
     qr_png = generate_qr_png(url, QR_PX_W, QR_PX_H)
     qr_img = Image.open(py_io.BytesIO(qr_png)).convert("RGBA")
 
-    # Создаём A4-оверлей
-    overlay_buf = py_io.BytesIO()
-    c = canvas.Canvas(overlay_buf, pagesize=(A4_W, A4_H))
+    # Рендерим макет один раз в PNG
+    template_img = convert_from_path(
+        template_path, dpi=150, first_page=1, last_page=1
+    )[0]
+    tmpl_buf = BytesIO()
+    template_img.save(tmpl_buf, format='PNG')
+    tmpl_buf.seek(0)
 
-    # Регистрируем шрифт для подписи если нужно
-    # Рисуем стикеры
+    # Компонуем A4
+    a4_buf = py_io.BytesIO()
+    c = canvas.Canvas(a4_buf, pagesize=(A4_W, A4_H))
+
     for i in range(STICKERS_PER_SHEET):
         y = A4_H - A4_MARGIN_Y - (STICKER_H + A4_GAP) * i - STICKER_H
         x = A4_MARGIN_X
 
-        # Сначала макет — рисуем как изображение
-        # Читаем макет, рендерим первую страницу как растр
-        from PIL import Image as PILImage
-        from pdf2image import convert_from_path
-        template_images = convert_from_path(template_path, dpi=150, first_page=1, last_page=1)
-        if template_images:
-            tmpl_img = template_images[0]
-            from io import BytesIO
-            buf = BytesIO()
-            tmpl_img.save(buf, format='PNG')
-            buf.seek(0)
-            c.drawImage(ImageReader(buf), x, y, width=STICKER_W, height=STICKER_H,
-                        preserveAspectRatio=True, anchor='sw')
-
+        # Макет
+        c.drawImage(
+            ImageReader(tmpl_buf),
+            x, y, width=STICKER_W, height=STICKER_H,
+            preserveAspectRatio=True, anchor='sw',
+        )
         # QR поверх
         c.drawImage(
             ImageReader(qr_img),
@@ -337,19 +340,17 @@ def generate_sticker_a4_sheet(template_path: str, url: str, output_path: str,
             width=QR_W, height=QR_H,
             mask='auto', preserveAspectRatio=True, anchor='sw',
         )
-
         # Подпись
         if caption:
-            c.setFont(font_name, 3.5)
+            c.setFont(_get_cyrillic_font_name(), 3.5)
             c.setFillColorRGB(0.4, 0.4, 0.4)
             c.drawCentredString(x + STICKER_W / 2, y + 1.5, caption)
 
     c.save()
 
-    # Сохраняем
-    overlay_buf.seek(0)
+    a4_buf.seek(0)
     with open(output_path, 'wb') as f:
-        f.write(overlay_buf.read())
+        f.write(a4_buf.read())
 
     print(f"✅ A4-лист: {output_path} ({STICKERS_PER_SHEET} стикеров)")
 

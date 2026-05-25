@@ -169,3 +169,26 @@ pip install -e .
 ## Лицензия
 
 MIT
+
+## Windows
+
+На Windows дополнительно требуется **poppler** для функции генерации A4-листа.
+
+1. Установи poppler через [conda](https://docs.conda.io/) (рекомендуется):
+   ```bash
+   conda install -c conda-forge poppler
+   ```
+   Или скачай с [poppler-for-windows](https://github.com/oschwartz10612/poppler-windows/releases) и добавь `bin/` в PATH.
+
+2. Установи пакет:
+   ```bash
+   pip install git+https://github.com/dantih/d-itmo-sticker-gen.git
+   ```
+
+Если poppler не нужен (используешь только отдельные стикеры, без A4-листа),
+можно установить `pdf2image` отдельно и настроить путь к poppler вручную:
+
+```python
+from pdf2image import pdfinfo_from_path
+pdf2image.pdf2image.set_poppler_path(r'C:\path\to\poppler\bin')
+```
