@@ -209,7 +209,14 @@ def generate_sticker_pypdf2_overlay(template_path: str, url: str, output_path: s
     )
     # Подпись — мелкий шрифт снизу по центру
     if caption:
-        c.setFont("Helvetica", 3.5)
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        try:
+            pdfmetrics.registerFont(TTFont('DejaVuSans', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
+            font_name = 'DejaVuSans'
+        except Exception:
+            font_name = 'Helvetica'
+        c.setFont(font_name, 3.5)
         c.setFillColorRGB(0.4, 0.4, 0.4)
         c.drawCentredString(PAGE_W / 2, 1.5, caption)
     c.save()
