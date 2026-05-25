@@ -369,10 +369,6 @@ def run_http_server(host='0.0.0.0', port=8080, template=DEFAULT_TEMPLATE):
                 self.wfile.write(b'OK')
                 return
 
-            if parsed.path == '/generate-a4':
-                self._handle_generate_a4(params)
-                return
-
             if parsed.path != '/generate':
                 # favicon и прочее — 404
                 self.send_response(404)

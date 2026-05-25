@@ -83,10 +83,18 @@ sticker-gen --url "https://itmo.ru" -o sticker.pdf --template my_maket.pdf
 ### HTTP-сервер
 
 ```bash
-sticker-gen --serve --port 8080
+# Запуск на порту 8080 (по умолчанию)
+sticker-gen --serve
 # → http://localhost:8080/ — веб-интерфейс
-# → http://localhost:8080/generate?url=<URL> — API (один стикер)
-# → http://localhost:8080/generate-a4?url=<URL> — API (лист A4)
+
+# На другом порту (например, 9090)
+sticker-gen --serve --port 9090
+
+# На конкретном IP/хосте
+sticker-gen --serve --host 127.0.0.1 --port 8080
+
+# Вся цепочка — свой шаблон + подпись
+sticker-gen --serve --port 8080 --template my_maket.pdf
 ```
 
 В веб-интерфейсе два поля: **ссылка** и **подпись** (опционально).
@@ -106,7 +114,10 @@ GET /generate?mode=a4&url=https://forms.yandex.ru/u/...&caption=Коворкин
 Content-Type: application/pdf
 ```
 
-Параметр `caption` — опциональный, текст подписи снизу наклейки.
+Параметры:
+- `url` — обязательный, ссылка для QR-кода
+- `caption` — опциональный, текст подписи снизу наклейки
+- `mode` — `single` (по умолчанию, один стикер) или `a4` (лист A4 с 8 стикерами)
 
 ## Установка как systemd-сервис
 
