@@ -405,7 +405,11 @@ def run_http_server(host='0.0.0.0', port=8080, template=DEFAULT_TEMPLATE):
 
         def do_GET(self):
             parsed = urllib.parse.urlparse(self.path)
-            params = urllib.parse.parse_qs(parsed.query)
+            # Явно декодируем query как UTF-8
+            raw_qs = parsed.query
+            if isinstance(raw_qs, bytes):
+                raw_qs = raw_qs.decode('utf-8', errors='replace')
+            params = urllib.parse.parse_qs(raw_qs)
 
             if parsed.path == '/':
                 # Главная страница
