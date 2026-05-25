@@ -18,7 +18,6 @@ import io
 import os
 import sys
 import uuid
-import tempfile
 
 from PIL import Image
 import qrcode
@@ -111,111 +110,9 @@ def generate_qr_png(url: str, width=QR_PX_W, height=QR_PX_H) -> bytes:
     return buf.getvalue()
 
 
-def render_template_page(template_path: str, dpi=300) -> Image.Image:
-    """Рендерит первую страницу PDF-макета в PIL Image (RGB)."""
-    from pdf2image import convert_from_path
-    images = convert_from_path(template_path, dpi=dpi, first_page=1, last_page=1)
-    if not images:
-        raise RuntimeError("No pages in template PDF")
-    return images[0]
 
 
-def generate_sticker(template_path: str, url: str, output_path: str, dpi=300):
-    """
-    Генерирует PDF наклейки:
-    1. Рендерит макет в изображение
-    2. Генерирует QR-код
-    3. Накладывает QR поверх макета
-    4. Сохраняет как PDF
-    """
-    # Рендерим макет
-    template_img = render_template_page(template_path, dpi)
 
-    # Размеры в пикселях
-    px_w, px_h = template_img.size
-
-    # QR в пикселях макета
-    qr_x_px = int(QR_X * dpi / 72)   # pt -> px
-    qr_y_px = int(QR_Y * dpi / 72)
-    qr_w_px = int(QR_W * dpi / 72)
-    qr_h_px = int(QR_H * dpi / 72)
-
-    # Генерируем QR и ресайзим под область
-    qr_png = generate_qr_png(url, qr_w_px, qr_h_px)
-    qr_img = Image.open(io.BytesIO(qr_png)).convert("RGBA")
-
-    # Накладываем QR на макет
-    # Координаты: PIL (0,0) = верхний левый угол
-    # PDF (0,0) = нижний левый угол
-    pil_qr_y = px_h - qr_y_px - qr_h_px
-    template_img.paste(qr_img, (qr_x_px, pil_qr_y), qr_img)
-
-    # Сохраняем в PDF
-    # Размер страницы в мм
-    pw_mm = PAGE_W * PT_TO_MM
-    ph_mm = PAGE_H * PT_TO_MM
-
-    c = canvas.Canvas(output_path, pagesize=(pw_mm * mm, ph_mm * mm))
-    c.drawImage(
-        ImageReader(template_img),
-        0, 0,
-        width=pw_mm * mm,
-        height=ph_mm * mm,
-        preserveAspectRatio=True,
-        anchor='sw',
-    )
-    c.showPage()
-    c.save()
-
-
-def generate_sticker_direct(template_path: str, url: str, output_path: str):
-    """
-    Альтернативный подход: берём макет как PDF, накладываем QR через reportlab
-    поверх в нужных координатах без рендеринга всего макета в растр.
-    
-    Используем pdfrw или PyPDF2 + reportlab overlay.
-    """
-    from PyPDF2 import PdfReader, PdfWriter
-    from reportlab.pdfgen import canvas
-    from reportlab.lib.utils import ImageReader
-    import io as python_io
-
-    # Читаем макет
-    reader = PdfReader(template_path)
-    page = reader.pages[0]
-
-    # Генерируем QR
-    qr_png = generate_qr_png(url, QR_PX_W, QR_PX_H)
-    qr_img = Image.open(python_io.BytesIO(qr_png)).convert("RGBA")
-
-    # Временный PDF с QR в нужных координатах
-    overlay_buf = python_io.BytesIO()
-    c = canvas.Canvas(overlay_buf, pagesize=(PAGE_W, PAGE_H))
-    c.drawImage(
-        ImageReader(qr_img),
-        QR_X, QR_Y,
-        width=QR_W,
-        height=QR_H,
-        mask='auto',
-        preserveAspectRatio=True,
-        anchor='sw',
-    )
-    c.save()
-
-    # Мерджим макет + оверлей
-    overlay_buf.seek(0)
-    overlay_reader = PdfReader(overlay_buf)
-    overlay_page = overlay_reader.pages[0]
-
-    writer = PdfWriter()
-    writer.add_page(page)
-    writer.add_page(overlay_page)
-
-    # Merge: накладываем содержимое второй страницы на первую
-    # Используем merge_page
-    page.merge_page(overlay_page)
-
-    writer.write(output_path)
 
 
 # =====================
@@ -358,6 +255,8 @@ def generate_sticker_a4_sheet(template_path: str, url: str, output_path: str,
     a4_buf = py_io.BytesIO()
     c = canvas.Canvas(a4_buf, pagesize=(A4_W, A4_H))
 
+    # Кешируем шрифт один раз до цикла
+    _caption_font = _get_cyrillic_font_name() if caption else None
     for i in range(STICKERS_PER_SHEET):
         y = A4_H - A4_MARGIN_Y - (STICKER_H + A4_GAP) * i - STICKER_H
         x = A4_MARGIN_X
@@ -375,9 +274,9 @@ def generate_sticker_a4_sheet(template_path: str, url: str, output_path: str,
             width=QR_W, height=QR_H,
             mask='auto', preserveAspectRatio=True, anchor='sw',
         )
-        # Подпись
-        if caption:
-            c.setFont(_get_cyrillic_font_name(), 3.5)
+        # Подпись (кешированный шрифт)
+        if caption and _caption_font:
+            c.setFont(_caption_font, 3.5)
             c.setFillColorRGB(0.4, 0.4, 0.4)
             c.drawCentredString(x + STICKER_W / 2, y + 1.5, caption)
 
