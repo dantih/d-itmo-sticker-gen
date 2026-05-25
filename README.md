@@ -15,6 +15,7 @@
 - **API:** `GET /generate?url=<URL>` — возвращает готовый PDF
 - Замена QR-кода в PDF-макете с сохранением всей вёрстки
 - **Подпись** — опциональное текстовое поле, мелким шрифтом печатается снизу наклейки (чтобы не путать помещения при расклейке)
+- **A4-лист** — генерация полного листа A4 с 8 одинаковыми стикерами для печати и нарезки
 - systemd-юнит для автозапуска
 
 ## Установка
@@ -84,19 +85,25 @@ sticker-gen --url "https://itmo.ru" -o sticker.pdf --template my_maket.pdf
 ```bash
 sticker-gen --serve --port 8080
 # → http://localhost:8080/ — веб-интерфейс
-# → http://localhost:8080/generate?url=<URL> — API
-# → http://localhost:8080/health — проверка
+# → http://localhost:8080/generate?url=<URL> — API (один стикер)
+# → http://localhost:8080/generate-a4?url=<URL> — API (лист A4)
 ```
 
 В веб-интерфейсе два поля: **ссылка** и **подпись** (опционально).
-После генерации — превью PDF прямо на странице и кнопка скачивания.
+После генерации появляются две кнопки:
+- **«Скачать PDF»** — один стикер
+- **«Скачать PDF A4»** — лист A4 с 8 стикерами для печати
 
 ### API
 
 ```
+# Один стикер
 GET /generate?url=https://forms.yandex.ru/u/...&caption=Коворкинг%20Альфа
 Content-Type: application/pdf
-Content-Disposition: attachment; filename="sticker_abc12345.pdf"
+
+# Лист A4 (8 стикеров для печати)
+GET /generate?mode=a4&url=https://forms.yandex.ru/u/...&caption=Коворкинг%20Альфа
+Content-Type: application/pdf
 ```
 
 Параметр `caption` — опциональный, текст подписи снизу наклейки.
