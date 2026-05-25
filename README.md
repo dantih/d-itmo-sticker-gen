@@ -18,11 +18,43 @@
 
 ## Установка
 
-```bash
-# pip из репозитория
-pip install git+https://github.com/dantih/d-itmo-sticker-gen.git
+### Быстрая (одной командой)
 
-# Или локально
+```bash
+pip install git+https://github.com/dantih/d-itmo-sticker-gen.git
+```
+
+После этого доступна команда `sticker-gen`. Пробуй:
+
+```bash
+sticker-gen --help
+```
+
+### Если система не даёт глобальную установку
+
+```bash
+pip3 install --user git+https://github.com/dantih/d-itmo-sticker-gen.git
+```
+
+После этого `sticker-gen` будет в `~/.local/bin/`. Если команда не находится:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+sticker-gen --serve
+```
+
+### В изолированное окружение (venv)
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install git+https://github.com/dantih/d-itmo-sticker-gen.git
+sticker-gen --serve
+```
+
+### Локально из репозитория
+
+```bash
 git clone https://github.com/dantih/d-itmo-sticker-gen
 cd d-itmo-sticker-gen
 pip install .
