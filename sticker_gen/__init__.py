@@ -405,10 +405,18 @@ def run_http_server(host='0.0.0.0', port=8080, template=DEFAULT_TEMPLATE):
 
         def do_GET(self):
             parsed = urllib.parse.urlparse(self.path)
-            # Явно декодируем query как UTF-8
+            # http.server подаёт parsed.query как str в Python 3.12+,
+            # но кириллица в сыром виде (UTF-8 octets как Latin-1).
+            # Если строка содержит suspect-символы, перекодируем.
             raw_qs = parsed.query
             if isinstance(raw_qs, bytes):
                 raw_qs = raw_qs.decode('utf-8', errors='replace')
+            # Пытаемся «исправить» double-encoded UTF-8
+            try:
+                fixed = raw_qs.encode('latin-1').decode('utf-8')
+                raw_qs = fixed
+            except (UnicodeEncodeError, UnicodeDecodeError):
+                pass
             params = urllib.parse.parse_qs(raw_qs)
 
             if parsed.path == '/':
@@ -445,6 +453,7 @@ def run_http_server(host='0.0.0.0', port=8080, template=DEFAULT_TEMPLATE):
 
             url = params.get('url', [None])[0]
             caption = params.get('caption', [None])[0] or ""
+
 
             if not url:
                 self.send_response(400)
