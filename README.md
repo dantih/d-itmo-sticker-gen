@@ -14,6 +14,7 @@
 - **HTTP-сервер:** `sticker-gen --serve` — встроенная веб-морда с превью
 - **API:** `GET /generate?url=<URL>` — возвращает готовый PDF
 - Замена QR-кода в PDF-макете с сохранением всей вёрстки
+- **Подпись** — опциональное текстовое поле, мелким шрифтом печатается снизу наклейки (чтобы не путать помещения при расклейке)
 - systemd-юнит для автозапуска
 
 ## Установка
@@ -70,6 +71,10 @@ pip install .
 # Одна наклейка
 sticker-gen --url "https://forms.yandex.ru/u/..." -o nakleika.pdf
 
+# С подписью (для маркировки помещения)
+sticker-gen --url "https://forms.yandex.ru/u/..." -o nakleika.pdf \
+  --caption "Коворкинг Альфа, 3 этаж"
+
 # Со своим шаблоном
 sticker-gen --url "https://itmo.ru" -o sticker.pdf --template my_maket.pdf
 ```
@@ -83,13 +88,18 @@ sticker-gen --serve --port 8080
 # → http://localhost:8080/health — проверка
 ```
 
+В веб-интерфейсе два поля: **ссылка** и **подпись** (опционально).
+После генерации — превью PDF прямо на странице и кнопка скачивания.
+
 ### API
 
 ```
-GET /generate?url=https://forms.yandex.ru/u/...
+GET /generate?url=https://forms.yandex.ru/u/...&caption=Коворкинг%20Альфа
 Content-Type: application/pdf
 Content-Disposition: attachment; filename="sticker_abc12345.pdf"
 ```
+
+Параметр `caption` — опциональный, текст подписи снизу наклейки.
 
 ## Установка как systemd-сервис
 
