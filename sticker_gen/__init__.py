@@ -1,0 +1,369 @@
+#!/usr/bin/env python3
+"""
+QR Sticker Generator v3
+========================
+Берёт PDF-макет наклейки, генерирует QR-код из ссылки,
+накладывает его поверх макета (или заменяет) и отдаёт готовый PDF.
+
+Подход: reportlab рисует макет как background изображение, 
+поверх печатает QR-код.
+
+Использование:
+  python3 qr_sticker.py --url "https://example.com" -o sticker.pdf
+  python3 qr_sticker.py --serve --port 8080
+"""
+
+import argparse
+import io
+import os
+import sys
+import uuid
+import tempfile
+
+from PIL import Image
+import qrcode
+
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
+
+# --- Конфигурация ---
+
+# Пути по умолчанию — ищем maket.pdf рядом с пакетом, затем в templates/
+_PKG_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_TEMPLATE = os.path.join(_PKG_DIR, "templates", "maket.pdf")
+OUTPUT_DIR = os.path.join(os.getcwd(), "sticker_output")
+
+# Размер и позиция QR в PDF (pt)
+QR_X = 9.843       # лево
+QR_Y = 9.585       # низ (от нижнего края страницы)
+QR_W = 72.563      # ширина
+QR_H = 76.882      # высота
+
+# Размер QR в пикселях рендеринга
+QR_PX_W = 302
+QR_PX_H = 320
+
+# Размер страницы макета (pt)
+PAGE_W = 311.811
+PAGE_H = 99.2126
+
+# Коэффициент для PDF -> PPM
+PT_TO_MM = 0.3528
+
+
+def generate_qr_png(url: str, width=QR_PX_W, height=QR_PX_H) -> bytes:
+    """Генерирует QR-код как PNG (RGBA)."""
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        box_size=10,
+        border=2,
+    )
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    img = img.resize((width, height), Image.NEAREST)
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def render_template_page(template_path: str, dpi=300) -> Image.Image:
+    """Рендерит первую страницу PDF-макета в PIL Image (RGB)."""
+    from pdf2image import convert_from_path
+    images = convert_from_path(template_path, dpi=dpi, first_page=1, last_page=1)
+    if not images:
+        raise RuntimeError("No pages in template PDF")
+    return images[0]
+
+
+def generate_sticker(template_path: str, url: str, output_path: str, dpi=300):
+    """
+    Генерирует PDF наклейки:
+    1. Рендерит макет в изображение
+    2. Генерирует QR-код
+    3. Накладывает QR поверх макета
+    4. Сохраняет как PDF
+    """
+    # Рендерим макет
+    template_img = render_template_page(template_path, dpi)
+
+    # Размеры в пикселях
+    px_w, px_h = template_img.size
+
+    # QR в пикселях макета
+    qr_x_px = int(QR_X * dpi / 72)   # pt -> px
+    qr_y_px = int(QR_Y * dpi / 72)
+    qr_w_px = int(QR_W * dpi / 72)
+    qr_h_px = int(QR_H * dpi / 72)
+
+    # Генерируем QR и ресайзим под область
+    qr_png = generate_qr_png(url, qr_w_px, qr_h_px)
+    qr_img = Image.open(io.BytesIO(qr_png)).convert("RGBA")
+
+    # Накладываем QR на макет
+    # Координаты: PIL (0,0) = верхний левый угол
+    # PDF (0,0) = нижний левый угол
+    pil_qr_y = px_h - qr_y_px - qr_h_px
+    template_img.paste(qr_img, (qr_x_px, pil_qr_y), qr_img)
+
+    # Сохраняем в PDF
+    # Размер страницы в мм
+    pw_mm = PAGE_W * PT_TO_MM
+    ph_mm = PAGE_H * PT_TO_MM
+
+    c = canvas.Canvas(output_path, pagesize=(pw_mm * mm, ph_mm * mm))
+    c.drawImage(
+        ImageReader(template_img),
+        0, 0,
+        width=pw_mm * mm,
+        height=ph_mm * mm,
+        preserveAspectRatio=True,
+        anchor='sw',
+    )
+    c.showPage()
+    c.save()
+
+
+def generate_sticker_direct(template_path: str, url: str, output_path: str):
+    """
+    Альтернативный подход: берём макет как PDF, накладываем QR через reportlab
+    поверх в нужных координатах без рендеринга всего макета в растр.
+    
+    Используем pdfrw или PyPDF2 + reportlab overlay.
+    """
+    from PyPDF2 import PdfReader, PdfWriter
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.utils import ImageReader
+    import io as python_io
+
+    # Читаем макет
+    reader = PdfReader(template_path)
+    page = reader.pages[0]
+
+    # Генерируем QR
+    qr_png = generate_qr_png(url, QR_PX_W, QR_PX_H)
+    qr_img = Image.open(python_io.BytesIO(qr_png)).convert("RGBA")
+
+    # Временный PDF с QR в нужных координатах
+    overlay_buf = python_io.BytesIO()
+    c = canvas.Canvas(overlay_buf, pagesize=(PAGE_W, PAGE_H))
+    c.drawImage(
+        ImageReader(qr_img),
+        QR_X, QR_Y,
+        width=QR_W,
+        height=QR_H,
+        mask='auto',
+        preserveAspectRatio=True,
+        anchor='sw',
+    )
+    c.save()
+
+    # Мерджим макет + оверлей
+    overlay_buf.seek(0)
+    overlay_reader = PdfReader(overlay_buf)
+    overlay_page = overlay_reader.pages[0]
+
+    writer = PdfWriter()
+    writer.add_page(page)
+    writer.add_page(overlay_page)
+
+    # Merge: накладываем содержимое второй страницы на первую
+    # Используем merge_page
+    page.merge_page(overlay_page)
+
+    writer.write(output_path)
+
+
+# =====================
+# Подход без pdf2image (не требует дополнительных зависимостей)
+# =====================
+
+def generate_sticker_pypdf2_overlay(template_path: str, url: str, output_path: str):
+    """
+    Используем PyPDF2 + reportlab для оверлея QR на макет.
+    Создаём PDF с QR, мерджим с макетом.
+    """
+    from PyPDF2 import PdfReader, PdfWriter
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.utils import ImageReader
+    import io as py_io
+
+    # QR как RGBA изображение
+    qr_png = generate_qr_png(url, QR_PX_W, QR_PX_H)
+    qr_img = Image.open(py_io.BytesIO(qr_png)).convert("RGBA")
+
+    # Создаём overlay PDF
+    overlay_buf = py_io.BytesIO()
+    c = canvas.Canvas(overlay_buf, pagesize=(PAGE_W, PAGE_H))
+    c.drawImage(
+        ImageReader(qr_img),
+        QR_X, QR_Y,
+        width=QR_W,
+        height=QR_H,
+        mask='auto',
+        preserveAspectRatio=True,
+        anchor='sw',
+    )
+    c.save()
+
+    # Читаем макет
+    overlay_buf.seek(0)
+    reader = PdfReader(template_path)
+    overlay_reader = PdfReader(overlay_buf)
+
+    writer = PdfWriter()
+
+    page = reader.pages[0]
+    overlay_page = overlay_reader.pages[0]
+
+    # merge_page накладывает содержимое overlay поверх макета
+    page.merge_page(overlay_page)
+
+    writer.add_page(page)
+    writer.write(output_path)
+
+
+# =====================
+# HTTP Сервис
+# =====================
+
+def run_http_server(host='0.0.0.0', port=8080, template=DEFAULT_TEMPLATE):
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    import urllib.parse
+
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    class StickerHandler(BaseHTTPRequestHandler):
+        template_path = template
+
+        def do_GET(self):
+            parsed = urllib.parse.urlparse(self.path)
+            params = urllib.parse.parse_qs(parsed.query)
+
+            if parsed.path == '/':
+                # Главная страница
+                html_path = os.path.join(_PKG_DIR, 'templates', 'index.html')
+                if os.path.exists(html_path):
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'text/html; charset=utf-8')
+                    self.end_headers()
+                    with open(html_path, 'rb') as f:
+                        self.wfile.write(f.read())
+                else:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'text/plain; charset=utf-8')
+                    self.end_headers()
+                    self.wfile.write(b'QR Sticker Service. Use /generate?url=<URL>')
+                return
+
+            if parsed.path == '/health':
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(b'OK')
+                return
+
+            if parsed.path != '/generate':
+                # favicon и прочее — 404
+                self.send_response(404)
+                self.send_header('Content-Type', 'text/plain; charset=utf-8')
+                self.end_headers()
+                body = '404 Not Found\n'
+                self.wfile.write(body.encode('utf-8'))
+                return
+
+            url = params.get('url', [None])[0]
+            if not url:
+                self.send_response(400)
+                self.send_header('Content-Type', 'text/plain; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(b'Missing "url" parameter')
+                return
+
+            allowed = ('http://', 'https://', 'tg://', 'itmo://')
+            if not url.startswith(allowed):
+                self.send_response(400)
+                self.send_header('Content-Type', 'text/plain; charset=utf-8')
+                self.end_headers()
+                msg = f'URL must start with: {", ".join(allowed)}'
+                self.wfile.write(msg.encode('utf-8'))
+                return
+
+            try:
+                out_name = f"sticker_{uuid.uuid4().hex[:8]}.pdf"
+                out_path = os.path.join(OUTPUT_DIR, out_name)
+                generate_sticker_pypdf2_overlay(self.template_path, url, out_path)
+
+                with open(out_path, 'rb') as f:
+                    pdf_data = f.read()
+
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/pdf')
+                self.send_header('Content-Disposition',
+                                 f'attachment; filename="{out_name}"')
+                self.send_header('Content-Length', str(len(pdf_data)))
+                self.end_headers()
+                self.wfile.write(pdf_data)
+
+                os.unlink(out_path)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                self.send_response(500)
+                self.send_header('Content-Type', 'text/plain; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(f'Error: {e}'.encode('utf-8'))
+
+        def log_message(self, fmt, *args):
+            print(f"[{self.log_date_time_string()}] {args[0]} {args[1]} {args[2]}")
+
+    server = HTTPServer((host, port), StickerHandler)
+    print(f"QR Sticker Service → http://{host}:{port}/generate?url=<URL>")
+    print(f"Health check       → http://{host}:{port}/health")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nShutting down...")
+        server.server_close()
+
+
+# =====================
+# CLI
+# =====================
+
+def main():
+    parser = argparse.ArgumentParser(description='Генератор наклеек с QR-кодом')
+    parser.add_argument('--url', help='Ссылка для QR-кода')
+    parser.add_argument('--output', '-o', help='Выходной PDF-файл')
+    parser.add_argument('--template', default=DEFAULT_TEMPLATE,
+                        help='Путь к PDF-шаблону (по умолчанию maket.pdf)')
+    parser.add_argument('--serve', action='store_true',
+                        help='Запустить HTTP-сервер')
+    parser.add_argument('--port', type=int, default=8080, help='Порт')
+    parser.add_argument('--host', default='0.0.0.0', help='Хост')
+
+    args = parser.parse_args()
+
+    if args.serve:
+        run_http_server(host=args.host, port=args.port, template=args.template)
+        return
+
+    if not args.url:
+        parser.print_help()
+        print("\nУкажите --url <ссылка> или --serve для запуска сервера")
+        sys.exit(1)
+
+    output = args.output or os.path.join(OUTPUT_DIR, 'sticker_output.pdf')
+    os.makedirs(os.path.dirname(output) or '.', exist_ok=True)
+
+    generate_sticker_pypdf2_overlay(args.template, args.url, output)
+    print(f"✅ Готово: {output}")
+
+
+if __name__ == '__main__':
+    main()
+
+
+# Для pip-установленного entry_point — main уже определена выше.

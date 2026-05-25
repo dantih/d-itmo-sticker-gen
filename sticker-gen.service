@@ -1,0 +1,16 @@
+[Unit]
+Description=ITMO Sticker Generator — QR-наклейки для помещений
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/sticker-gen
+ExecStart=/usr/local/bin/sticker-gen --serve --port 8080
+Restart=on-failure
+RestartSec=5
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
