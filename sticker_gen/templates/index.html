@@ -282,13 +282,21 @@
             </div>
             <div class="error" id="errorMsg"></div>
             <div class="action-row" id="actionRow" style="display:none">
-                <button class="btn btn-success" onclick="downloadPdf()">
+                <button class="btn btn-success" onclick="downloadPdf()" id="btnDownloadSingle">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                         <path d="M13.5 11.5v2a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-2M8 10V2.5M5 5.5l3-3 3 3"
                               stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
                               stroke-linejoin="round"/>
                     </svg>
                     Скачать PDF
+                </button>
+                <button class="btn btn-success" onclick="downloadPdfA4()" id="btnDownloadA4" style="display:none">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M13.5 11.5v2a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-2M8 10V2.5M5 5.5l3-3 3 3"
+                              stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                              stroke-linejoin="round"/>
+                    </svg>
+                    Скачать PDF A4
                 </button>
                 <button class="btn btn-outline" onclick="document.getElementById('urlInput').select();document.getElementById('urlInput').focus()">
                     Создать ещё
@@ -410,6 +418,7 @@
 
                 // Кнопки действий
                 actionRow.style.display = 'flex';
+                document.getElementById('btnDownloadA4').style.display = 'flex';
                 btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 11.5v2a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-2M8 10V2.5M5 5.5l3-3 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Сгенерировать ещё';
 
             } catch (err) {
@@ -429,6 +438,39 @@
             link.click();
             document.body.removeChild(link);
             setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+        }
+
+        async function downloadPdfA4() {
+            const url = input.value.trim();
+            if (!url) return;
+            const cap = document.getElementById('captionInput').value.trim();
+
+            try {
+                const btnA4 = document.getElementById('btnDownloadA4');
+                btnA4.disabled = true;
+                btnA4.innerHTML = '<span class="spinner"></span> Генерация…';
+
+                const resp = await fetch(API_URL + '?mode=a4&url=' + encodeURIComponent(url) + '&caption=' + encodeURIComponent(cap));
+                if (!resp.ok) {
+                    const text = await resp.text();
+                    throw new Error(text || `Ошибка ${resp.status}`);
+                }
+
+                const blob = await resp.blob();
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'stickers_a4.pdf';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+            } catch (err) {
+                showError(err.message || 'Ошибка генерации A4');
+            } finally {
+                const btnA4 = document.getElementById('btnDownloadA4');
+                btnA4.disabled = false;
+                btnA4.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 11.5v2a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-2M8 10V2.5M5 5.5l3-3 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Скачать PDF A4';
+            }
         }
     </script>
 </body>

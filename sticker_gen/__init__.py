@@ -239,6 +239,97 @@ def generate_sticker_pypdf2_overlay(template_path: str, url: str, output_path: s
 
 
 # =====================
+# A4 лист — 8 одинаковых стикеров на странице
+# =====================
+
+A4_W = 595.28   # pt (210 мм)
+A4_H = 841.89   # pt (297 мм)
+
+STICKER_W = PAGE_W   # 311.811 pt
+STICKER_H = PAGE_H   # 99.2126 pt
+
+# Отступы для центрирования колонки
+A4_MARGIN_X = (A4_W - STICKER_W) / 2   # ~141.7 pt слева/справа
+A4_MARGIN_Y = 16   # отступ сверху
+A4_GAP = 2         # промежуток между стикерами по вертикали
+
+# Сколько стикеров влезает по вертикали
+STICKERS_PER_SHEET = int((A4_H - A4_MARGIN_Y * 2) / (STICKER_H + A4_GAP))
+
+
+def generate_sticker_a4_sheet(template_path: str, url: str, output_path: str,
+                               caption: str = ""):
+    """
+    Генерирует лист A4 с одинаковыми стикерами (8 шт в колонку).
+    """
+    from PyPDF2 import PdfReader, PdfWriter
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.utils import ImageReader
+    import io as py_io
+
+    # Генерируем один QR
+    qr_png = generate_qr_png(url, QR_PX_W, QR_PX_H)
+    qr_img = Image.open(py_io.BytesIO(qr_png)).convert("RGBA")
+
+    # Создаём A4-оверлей
+    overlay_buf = py_io.BytesIO()
+    c = canvas.Canvas(overlay_buf, pagesize=(A4_W, A4_H))
+
+    # Регистрируем шрифт для подписи если нужно
+    font_name = 'Helvetica'
+    if caption:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        try:
+            pdfmetrics.registerFont(TTFont('DejaVuSans', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
+            font_name = 'DejaVuSans'
+        except Exception:
+            pass
+
+    # Рисуем стикеры
+    for i in range(STICKERS_PER_SHEET):
+        y = A4_H - A4_MARGIN_Y - (STICKER_H + A4_GAP) * i - STICKER_H
+        x = A4_MARGIN_X
+
+        # Сначала макет — рисуем как изображение
+        # Читаем макет, рендерим первую страницу как растр
+        from PIL import Image as PILImage
+        from pdf2image import convert_from_path
+        template_images = convert_from_path(template_path, dpi=150, first_page=1, last_page=1)
+        if template_images:
+            tmpl_img = template_images[0]
+            from io import BytesIO
+            buf = BytesIO()
+            tmpl_img.save(buf, format='PNG')
+            buf.seek(0)
+            c.drawImage(ImageReader(buf), x, y, width=STICKER_W, height=STICKER_H,
+                        preserveAspectRatio=True, anchor='sw')
+
+        # QR поверх
+        c.drawImage(
+            ImageReader(qr_img),
+            x + QR_X, y + QR_Y,
+            width=QR_W, height=QR_H,
+            mask='auto', preserveAspectRatio=True, anchor='sw',
+        )
+
+        # Подпись
+        if caption:
+            c.setFont(font_name, 3.5)
+            c.setFillColorRGB(0.4, 0.4, 0.4)
+            c.drawCentredString(x + STICKER_W / 2, y + 1.5, caption)
+
+    c.save()
+
+    # Сохраняем
+    overlay_buf.seek(0)
+    with open(output_path, 'wb') as f:
+        f.write(overlay_buf.read())
+
+    print(f"✅ A4-лист: {output_path} ({STICKERS_PER_SHEET} стикеров)")
+
+
+# =====================
 # HTTP Сервис
 # =====================
 
@@ -278,6 +369,10 @@ def run_http_server(host='0.0.0.0', port=8080, template=DEFAULT_TEMPLATE):
                 self.wfile.write(b'OK')
                 return
 
+            if parsed.path == '/generate-a4':
+                self._handle_generate_a4(params)
+                return
+
             if parsed.path != '/generate':
                 # favicon и прочее — 404
                 self.send_response(404)
@@ -307,11 +402,21 @@ def run_http_server(host='0.0.0.0', port=8080, template=DEFAULT_TEMPLATE):
                 return
 
             try:
-                out_name = f"sticker_{uuid.uuid4().hex[:8]}.pdf"
-                out_path = os.path.join(OUTPUT_DIR, out_name)
-                generate_sticker_pypdf2_overlay(
-                    self.template_path, url, out_path, caption=caption,
-                )
+                # Определяем режим — по умолчанию один стикер
+                mode = params.get('mode', ['single'])[0]
+
+                if mode == 'a4':
+                    out_name = f"stickers_a4_{uuid.uuid4().hex[:8]}.pdf"
+                    out_path = os.path.join(OUTPUT_DIR, out_name)
+                    generate_sticker_a4_sheet(
+                        self.template_path, url, out_path, caption=caption,
+                    )
+                else:
+                    out_name = f"sticker_{uuid.uuid4().hex[:8]}.pdf"
+                    out_path = os.path.join(OUTPUT_DIR, out_name)
+                    generate_sticker_pypdf2_overlay(
+                        self.template_path, url, out_path, caption=caption,
+                    )
 
                 with open(out_path, 'rb') as f:
                     pdf_data = f.read()
