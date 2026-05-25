@@ -52,6 +52,48 @@ PAGE_H = 99.2126
 PT_TO_MM = 0.3528
 
 
+# =====================
+# Шрифт для подписи (с кириллицей)
+# =====================
+
+def _get_cyrillic_font_name() -> str:
+    """Возвращает имя шрифта с поддержкой кириллицы для reportlab.
+    Пробует DejaVu Sans по известным путям, затем через fc-match,
+    иначе Helvetica (без кириллицы).
+    """
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    import subprocess as _sp
+
+    _font_paths = [
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+        '/usr/share/fonts/dejavu/DejaVuSans.ttf',
+        '/System/Library/Fonts/DejaVuSans.ttf',
+    ]
+    _found = None
+    for _fp in _font_paths:
+        if os.path.exists(_fp):
+            _found = _fp
+            break
+    if not _found:
+        try:
+            _found = _sp.check_output(
+                ['fc-match', '-f', '%{file}', 'DejaVu Sans'],
+                text=True
+            ).strip()
+            if not _found or not os.path.exists(_found):
+                _found = None
+        except Exception:
+            _found = None
+    if _found:
+        try:
+            pdfmetrics.registerFont(TTFont('DejaVuSans', _found))
+            return 'DejaVuSans'
+        except Exception:
+            pass
+    return 'Helvetica'
+
+
 def generate_qr_png(url: str, width=QR_PX_W, height=QR_PX_H) -> bytes:
     """Генерирует QR-код как PNG (RGBA)."""
     qr = qrcode.QRCode(
@@ -209,14 +251,7 @@ def generate_sticker_pypdf2_overlay(template_path: str, url: str, output_path: s
     )
     # Подпись — мелкий шрифт снизу по центру
     if caption:
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
-        try:
-            pdfmetrics.registerFont(TTFont('DejaVuSans', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
-            font_name = 'DejaVuSans'
-        except Exception:
-            font_name = 'Helvetica'
-        c.setFont(font_name, 3.5)
+        c.setFont(_get_cyrillic_font_name(), 3.5)
         c.setFillColorRGB(0.4, 0.4, 0.4)
         c.drawCentredString(PAGE_W / 2, 1.5, caption)
     c.save()
@@ -276,16 +311,6 @@ def generate_sticker_a4_sheet(template_path: str, url: str, output_path: str,
     c = canvas.Canvas(overlay_buf, pagesize=(A4_W, A4_H))
 
     # Регистрируем шрифт для подписи если нужно
-    font_name = 'Helvetica'
-    if caption:
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
-        try:
-            pdfmetrics.registerFont(TTFont('DejaVuSans', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
-            font_name = 'DejaVuSans'
-        except Exception:
-            pass
-
     # Рисуем стикеры
     for i in range(STICKERS_PER_SHEET):
         y = A4_H - A4_MARGIN_Y - (STICKER_H + A4_GAP) * i - STICKER_H
