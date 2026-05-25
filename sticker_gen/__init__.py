@@ -476,7 +476,8 @@ def run_http_server(host='0.0.0.0', port=8080, template=DEFAULT_TEMPLATE):
                 mode = params.get('mode', ['single'])[0]
 
                 if mode == 'a4':
-                    out_name = _make_filename(caption, 'stickers_a4')
+                    # A4 всегда с рандомным суффиксом, без подписи
+                    out_name = f"stickers_a4_{uuid.uuid4().hex[:8]}.pdf"
                     out_path = os.path.join(OUTPUT_DIR, out_name)
                     generate_sticker_a4_sheet(
                         self.template_path, url, out_path, caption=caption,
