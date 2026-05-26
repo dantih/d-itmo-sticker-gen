@@ -209,29 +209,38 @@ def _make_filename(caption: str, prefix: str = "sticker") -> str:
     return f"{prefix}_{result[:40].rstrip('_')}.pdf"
 
 
-A4_W = 595.28   # pt (210 мм)
-A4_H = 841.89   # pt (297 мм)
+A4_W = 841.89  # pt — альбомный A4 (297 × 210 мм)
+A4_H = 595.28
 
 STICKER_W = PAGE_W   # 311.811 pt
 STICKER_H = PAGE_H   # 99.2126 pt
 
-# Отступы для центрирования колонки
-A4_MARGIN_X = (A4_W - STICKER_W) / 2   # ~141.7 pt слева/справа
-A4_MARGIN_Y = 16   # отступ сверху
-A4_GAP = 2         # промежуток между стикерами по вертикали
+# Сетка 2 колонки × 6 рядов = 12 стикеров
+A4_COLS = 2
+A4_ROWS = 6
 
-# Сколько стикеров влезает по вертикали
-STICKERS_PER_SHEET = int((A4_H - A4_MARGIN_Y * 2) / (STICKER_H + A4_GAP))
+# Межстикерные промежутки
+A4_GAP_X = 8   # pt между колонками
+A4_GAP_Y = 6   # pt между рядами
+
+# Суммарная ширина двух колонок с зазором
+TOTAL_W = A4_COLS * STICKER_W + (A4_COLS - 1) * A4_GAP_X
+# Суммарная высота 6 рядов с зазорами
+TOTAL_H = A4_ROWS * STICKER_H + (A4_ROWS - 1) * A4_GAP_Y
+
+# Отступы для центрирования сетки на A4
+A4_MARGIN_X = (A4_W - TOTAL_W) / 2
+A4_MARGIN_Y = (A4_H - TOTAL_H) / 2
+
+STICKERS_PER_SHEET = A4_COLS * A4_ROWS
 
 
 def generate_sticker_a4_sheet(template_path: str, url: str, output_path: str,
                                caption: str = ""):
     """
-    Генерирует лист A4 с одинаковыми стикерами (8 шт в колонку).
+    Генерирует альбомный лист A4 с максимальной раскладкой стикеров.
 
-    Использует pdf2image для однократного рендера макета в PNG,
-    после чего reportlab компонует A4-страницу. На Windows требует
-    установки poppler (см. README).
+    12 шт (2 колонки × 6 рядов) плотно упакованы, центрированы.
     """
     from reportlab.pdfgen import canvas
     from reportlab.lib.utils import ImageReader
@@ -258,8 +267,11 @@ def generate_sticker_a4_sheet(template_path: str, url: str, output_path: str,
     # Кешируем шрифт один раз до цикла
     _caption_font = _get_cyrillic_font_name() if caption else None
     for i in range(STICKERS_PER_SHEET):
-        y = A4_H - A4_MARGIN_Y - (STICKER_H + A4_GAP) * i - STICKER_H
-        x = A4_MARGIN_X
+        col = i % A4_COLS
+        row = i // A4_COLS
+
+        x = A4_MARGIN_X + col * (STICKER_W + A4_GAP_X)
+        y = A4_MARGIN_Y + row * (STICKER_H + A4_GAP_Y)
 
         # Макет
         c.drawImage(
@@ -274,7 +286,7 @@ def generate_sticker_a4_sheet(template_path: str, url: str, output_path: str,
             width=QR_W, height=QR_H,
             mask='auto', preserveAspectRatio=True, anchor='sw',
         )
-        # Подпись (кешированный шрифт)
+        # Подпись
         if caption and _caption_font:
             c.setFont(_caption_font, 3.5)
             c.setFillColorRGB(0.4, 0.4, 0.4)
@@ -286,7 +298,7 @@ def generate_sticker_a4_sheet(template_path: str, url: str, output_path: str,
     with open(output_path, 'wb') as f:
         f.write(a4_buf.read())
 
-    print(f"✅ A4-лист: {output_path} ({STICKERS_PER_SHEET} стикеров)")
+    print(f"✅ A4-лист (альбомный): {output_path} ({STICKERS_PER_SHEET} стикеров)")
 
 
 # =====================
