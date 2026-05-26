@@ -359,6 +359,14 @@ def run_http_server(host='0.0.0.0', port=8080, template=DEFAULT_TEMPLATE):
     class StickerHandler(BaseHTTPRequestHandler):
         template_path = template
 
+        # Счётчики: class-level для общего доступа
+        _counter = {
+            'single': 0,
+            'a4': 0,
+            'total': 0,
+            'since': None,  # установим при первом запросе
+        }
+
         def do_GET(self):
             parsed = urllib.parse.urlparse(self.path)
             # http.server подаёт parsed.query как str в Python 3.12+,
@@ -398,6 +406,25 @@ def run_http_server(host='0.0.0.0', port=8080, template=DEFAULT_TEMPLATE):
                 self.wfile.write(b'OK')
                 return
 
+            if parsed.path == '/stats':
+                import datetime as _dt
+                from json import dumps as _jdumps
+                now = _dt.datetime.now().isoformat()
+                since = self._counter.get('since')
+                payload = {
+                    'total': self._counter['total'],
+                    'single': self._counter['single'],
+                    'a4': self._counter['a4'],
+                    'since': since or now,
+                    'now': now,
+                }
+                body = _jdumps(payload, ensure_ascii=False, indent=2)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(body.encode('utf-8'))
+                return
+
             if parsed.path != '/generate':
                 # favicon и прочее — 404
                 self.send_response(404)
@@ -430,6 +457,16 @@ def run_http_server(host='0.0.0.0', port=8080, template=DEFAULT_TEMPLATE):
             try:
                 # Определяем режим — по умолчанию один стикер
                 mode = params.get('mode', ['single'])[0]
+
+                # Счётчик
+                self._counter['total'] += 1
+                if self._counter['since'] is None:
+                    import datetime as _dt_c
+                    self._counter['since'] = _dt_c.datetime.now().isoformat()
+                if mode == 'a4':
+                    self._counter['a4'] += 1
+                else:
+                    self._counter['single'] += 1
 
                 if mode == 'a4':
                     out_name = _make_filename(caption, 'sticker_a4')
