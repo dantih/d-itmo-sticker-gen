@@ -239,7 +239,8 @@ STICKERS_PER_SHEET = A4_COLS * A4_ROWS + 1  # 11
 
 # Позиция повёрнутого стикера (колонка 2, после двух колонок)
 ROTATED_X = A4_MARGIN_X + BLOCK_W + A4_GAP_X
-ROTATED_Y = A4_MARGIN_Y + (TOTAL_H - STICKER_H) / 2  # центрирован по высоте
+# После поворота на -90°, визуальная высота = STICKER_W (311.8 pt)
+ROTATED_Y = A4_MARGIN_Y + (TOTAL_H - STICKER_W) / 2  # центрирован по высоте
 
 # Трансформированный QR для повёрнутого стикера — считаем относительно
 # повёрнутой системы координат (w=STICKER_H, h=STICKER_W)
