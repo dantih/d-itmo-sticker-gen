@@ -215,32 +215,47 @@ A4_H = 595.28
 STICKER_W = PAGE_W   # 311.811 pt
 STICKER_H = PAGE_H   # 99.2126 pt
 
-# Сетка 2 колонки × 6 рядов = 12 стикеров
+# Раскладка: 2 колонки по 5 обычных + 1 повёрнутый справа = 11 стикеров
 A4_COLS = 2
-A4_ROWS = 6
+A4_ROWS = 5
 
 # Межстикерные промежутки
 A4_GAP_X = 8   # pt между колонками
 A4_GAP_Y = 6   # pt между рядами
 
-# Суммарная ширина двух колонок с зазором
-TOTAL_W = A4_COLS * STICKER_W + (A4_COLS - 1) * A4_GAP_X
-# Суммарная высота 6 рядов с зазорами
+# Ширина блока обычных (2 колонки)
+BLOCK_W = A4_COLS * STICKER_W + (A4_COLS - 1) * A4_GAP_X
+# + ширина повёрнутого стикера + зазор
+TOTAL_W = BLOCK_W + A4_GAP_X + STICKER_H
+
+# Высота блока обычных (5 рядов)
 TOTAL_H = A4_ROWS * STICKER_H + (A4_ROWS - 1) * A4_GAP_Y
 
-# Отступы для центрирования сетки на A4
+# Отступы для центрирования всей композиции
 A4_MARGIN_X = (A4_W - TOTAL_W) / 2
 A4_MARGIN_Y = (A4_H - TOTAL_H) / 2
 
-STICKERS_PER_SHEET = A4_COLS * A4_ROWS
+STICKERS_PER_SHEET = A4_COLS * A4_ROWS + 1  # 11
+
+# Позиция повёрнутого стикера (колонка 2, после двух колонок)
+ROTATED_X = A4_MARGIN_X + BLOCK_W + A4_GAP_X
+ROTATED_Y = A4_MARGIN_Y + (TOTAL_H - STICKER_H) / 2  # центрирован по высоте
+
+# Трансформированный QR для повёрнутого стикера — считаем относительно
+# повёрнутой системы координат (w=STICKER_H, h=STICKER_W)
+ROT_QR_X = QR_X
+ROT_QR_Y = QR_Y
+ROT_QR_W = QR_W
+ROT_QR_H = QR_H
 
 
 def generate_sticker_a4_sheet(template_path: str, url: str, output_path: str,
                                caption: str = ""):
     """
-    Генерирует альбомный лист A4 с максимальной раскладкой стикеров.
+    Генерирует альбомный лист A4.
 
-    12 шт (2 колонки × 6 рядов) плотно упакованы, центрированы.
+    Раскладка: 2 колонки по 5 обычных стикеров + 1 повёрнутый на 90° справа.
+    Всего 11 стикеров на листе.
     """
     from reportlab.pdfgen import canvas
     from reportlab.lib.utils import ImageReader
@@ -266,31 +281,64 @@ def generate_sticker_a4_sheet(template_path: str, url: str, output_path: str,
 
     # Кешируем шрифт один раз до цикла
     _caption_font = _get_cyrillic_font_name() if caption else None
-    for i in range(STICKERS_PER_SHEET):
+
+    # --- Обычные стикеры (2 колонки × 5 рядов) ---
+    for i in range(A4_COLS * A4_ROWS):
         col = i % A4_COLS
         row = i // A4_COLS
 
         x = A4_MARGIN_X + col * (STICKER_W + A4_GAP_X)
         y = A4_MARGIN_Y + row * (STICKER_H + A4_GAP_Y)
 
-        # Макет
         c.drawImage(
             ImageReader(tmpl_buf),
             x, y, width=STICKER_W, height=STICKER_H,
             preserveAspectRatio=True, anchor='sw',
         )
-        # QR поверх
         c.drawImage(
             ImageReader(qr_img),
             x + QR_X, y + QR_Y,
             width=QR_W, height=QR_H,
             mask='auto', preserveAspectRatio=True, anchor='sw',
         )
-        # Подпись
         if caption and _caption_font:
             c.setFont(_caption_font, 3.5)
             c.setFillColorRGB(0.4, 0.4, 0.4)
             c.drawCentredString(x + STICKER_W / 2, y + 1.5, caption)
+
+    # --- Повёрнутый стикер справа ---
+    rot_x = ROTATED_X
+    rot_y = ROTATED_Y
+
+    # Сохраняем контекст, поворачиваем на 90° против часовой
+    c.saveState()
+    # reportlab поворот вокруг (rot_x, rot_y)
+    c.translate(rot_x, rot_y)
+    # Поворот на 90° CCW: ширина станет высотой и наоборот
+    c.rotate(-90)
+    # Теперь (0,0) — нижний левый угол повёрнутого стикера.
+    # После поворота на -90: то что было вдоль X теперь вдоль -Y.
+    # Чтобы QR и подпись оказались в правильном месте,
+    # отрисовываем макет с шириной STICKER_H и высотой STICKER_W
+    # (поменяны местами из-за поворота).
+    c.drawImage(
+        ImageReader(tmpl_buf),
+        0, 0,
+        width=STICKER_W, height=STICKER_H,
+        preserveAspectRatio=True, anchor='sw',
+    )
+    c.drawImage(
+        ImageReader(qr_img),
+        QR_X, QR_Y,
+        width=QR_W, height=QR_H,
+        mask='auto', preserveAspectRatio=True, anchor='sw',
+    )
+    if caption and _caption_font:
+        c.setFont(_caption_font, 3.5)
+        c.setFillColorRGB(0.4, 0.4, 0.4)
+        c.drawCentredString(STICKER_W / 2, 1.5, caption)
+
+    c.restoreState()
 
     c.save()
 
