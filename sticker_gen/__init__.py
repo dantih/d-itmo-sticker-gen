@@ -241,7 +241,7 @@ STICKERS_PER_SHEET = A4_COLS * A4_ROWS + 1  # 11
 ROTATED_X = A4_MARGIN_X + BLOCK_W + A4_GAP_X
 # После поворота на -90°, визуальная высота = STICKER_W (311.8 pt)
 # Низ повёрнутого стикера = верхняя граница блока обычных минус его высота
-ROTATED_Y = (A4_MARGIN_Y + TOTAL_H) + STICKER_W
+ROTATED_Y = (A4_MARGIN_Y + TOTAL_H) - STICKER_W
 
 
 
