@@ -243,12 +243,7 @@ ROTATED_X = A4_MARGIN_X + BLOCK_W + A4_GAP_X
 # Низ повёрнутого стикера = верхняя граница блока обычных минус его высота
 ROTATED_Y = (A4_MARGIN_Y + TOTAL_H) - STICKER_W + 100  # поднят на 100 pt вверх
 
-# Трансформированный QR для повёрнутого стикера — считаем относительно
-# повёрнутой системы координат (w=STICKER_H, h=STICKER_W)
-ROT_QR_X = QR_X
-ROT_QR_Y = QR_Y
-ROT_QR_W = QR_W
-ROT_QR_H = QR_H
+
 
 
 def generate_sticker_a4_sheet(template_path: str, url: str, output_path: str,
